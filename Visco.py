@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from BiomechTools import low_pass, zero_crossing, max_min, simpson_nonuniform
+from BiomechTools import low_pass, zero_crossing, max_min, simpson_nonuniform, critically_damped, residual_analysis
 
 
 class Visco:
@@ -49,6 +49,7 @@ class Visco:
     def filter_data(self):
         self.smooth_tor = low_pass(self.tor, self.sampling_rate, 4)
         self.smooth_pos = low_pass(self.pos, self.sampling_rate, 4)
+        self.smooth_vel= critically_damped(self.vel, self.sampling_rate, 10)
 
     def get_min(self, first_pt, last_pt):
         min_location = first_pt
@@ -68,8 +69,18 @@ class Visco:
                 max_val = self.smooth_pos[i]
         return max_location
 
+    def get_max_tor(self, first_pt, last_pt):
+        max_location = first_pt
+        max_val = self.smooth_tor[first_pt]
+        for i in range(first_pt, last_pt):
+            if self.smooth_tor[i] > max_val:
+                max_location = i
+                max_val = self.smooth_tor[i]
+        return max_location
+
+
     def find_rep(self, show_graph):
-        p_18, r_or_f = zero_crossing(self.smooth_pos, 135, 10, self.n - 2)
+        p_18, r_or_f = zero_crossing(self.smooth_pos, 120, 10, self.n - 2)
         if r_or_f[0] == 'falling':      # make sure first point is falling as it pos passes reference (135 deg)
             start_pt = 0
             cnt = len(p_18)
@@ -87,11 +98,11 @@ class Visco:
             cntr = cntr + 2
             rep = rep + 1
         # now use cntr to check for one last rep
-        if cntr <= (len(p_18) - 2):
-            self.rep_start[rep] = self.rep_end[rep - 1]
-            self.max_loc[rep] = self.get_max(p_18[cntr + 1], p_18[cntr + 2])
-            self.rep_end[rep] = self.get_min(p_18[cntr + 2], p_18[cntr + 3])
-            rep = rep + 1
+        #if cntr <= (len(p_18) - 2):
+            #self.rep_start[rep] = self.rep_end[rep - 1]
+            #self.max_loc[rep] = self.get_max(p_18[cntr + 1], p_18[cntr + 2])
+            #self.rep_end[rep] = self.get_min(p_18[cntr + 2], p_18[cntr + 3])
+            #rep = rep + 1
         self.n_reps = rep
         if show_graph:
             plt.plot(self.pt, self.smooth_pos)
@@ -112,13 +123,28 @@ class Visco:
             self.stiffness[rep] = (self.smooth_tor[self.max_loc[rep]] - self.smooth_tor[self.rep_start[rep]]) / (
                 np.radians(self.smooth_pos[self.max_loc[rep]] - self.smooth_pos[self.rep_start[rep]]))
 
+    def graph_residual(self):
+        residual = residual_analysis(self.tor, self.sampling_rate, 0.5, 20.0)
+        freq = np.arange(0.5, 20, 0.5)
+        plt.plot(freq, residual)
+        plt.show()
 
     def graph_rep(self, rep):
         x = self.smooth_pos[self.rep_start[rep] : self.rep_end[rep]]
         y = self.smooth_tor[self.rep_start[rep] : self.rep_end[rep]]
+        max_torque_pt = self.get_max_tor(0, len(y))
         plt.plot(x, y)
-        plt.scatter(x[0], y[0])     # identify the start of the repetition
+        plt.scatter(x[0], y[0]) # identify the start of the repetition
+        plt.scatter(x[max_torque_pt], y[max_torque_pt])
         plt.show()
+
+
+    def save_rep(self, rep, rep_name):
+        p = self.smooth_pos[self.rep_start[rep] : self.rep_end[rep]]
+        t = self.smooth_tor[self.rep_start[rep] : self.rep_end[rep]]
+        v = self.smooth_vel[self.rep_start[rep] : self.rep_end[rep]]
+
+        np.savetxt(rep_name, np.column_stack((p, t, v)),  fmt='%.6f', delimiter=',', newline='\n', header="angle, torque, velocity")
 
     def graph_all_reps(self):
         for rep in range(self.n_reps):
