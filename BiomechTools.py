@@ -241,6 +241,19 @@ def single_pass(raw, sampling_rate, filter_cutoff):
     return smooth
 
 
+def residual_analysis(raw, sampling_rate, first_cutoff, last_cutoff):
+    residual = np.arange(first_cutoff, last_cutoff, 0.5)
+    cntr = 0
+    for i in np.arange(first_cutoff, last_cutoff, 0.5):
+        smooth = low_pass(raw, sampling_rate, i)
+        sum = 0.0
+        for k in range(len(raw)):
+            sum = sum + ((raw[k] - smooth[k]) * (raw[k] - smooth[k]))
+        residual[cntr] = np.sqrt(sum/len(raw))
+        cntr = cntr + 1
+    return residual
+
+
 def critically_damped(raw, sampling_rate, filter_cutoff):
     """ algorithm implements a 20th order recursive critically damped
         low pass zero-lag Butterworth filter.
@@ -334,7 +347,7 @@ def critically_damped(raw, sampling_rate, filter_cutoff):
     for i in range(0, (n + 4)):
         temp[i] = prime[i]
     for i in range((n + 1), -1, -1):
-        prime[i] = a0 * temp[i] + a1 * temp[i + 1] + a2 * \
+       prime[i] = a0 * temp[i] + a1 * temp[i + 1] + a2 * \
                    temp[i + 2] + b1 * prime[i + 1] + b2 * prime[i + 2]
 
     # --------------------------------------------------------------
@@ -381,5 +394,3 @@ def critically_damped(raw, sampling_rate, filter_cutoff):
 
     for i in range(0, n):
         smooth[i] = prime[i + 2]
-    return smooth  # return the smoothed raw
-
